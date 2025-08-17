@@ -500,58 +500,42 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Main function - this starts the bot"""
-    # Check if bot token exists
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN not found in environment variables!")
         return
     
-    # Create the bot application with the token
+    # Create the bot app
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Set up bot commands and menu (this runs when bot starts)
-    application.job_queue.run_once(
-        lambda context: setup_bot_commands(application), 
-        when=1  # Run 1 second after bot starts
-    )
+    # Ensure commands + menu are registered at startup
+    async def on_startup(app):
+        await setup_bot_commands(app)
+    application.post_init = on_startup
     
-    # Create conversation handler for registration process
+    # Conversation handler for registration process
     registration_handler = ConversationHandler(
-        # Entry point - how the conversation starts
         entry_points=[CallbackQueryHandler(start_registration_callback, pattern='start_registration')],
-        
-        # States - what happens in each step of the conversation
         states={
-            # When waiting for name, handle text messages with get_name function
             WAITING_FOR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-            # When waiting for phone, handle both contact sharing and text messages
             WAITING_FOR_PHONE: [
-                MessageHandler(filters.CONTACT, get_phone),                    # Handle contact sharing
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)    # Handle manual text input
+                MessageHandler(filters.CONTACT, get_phone),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)
             ],
         },
-        # Fallback - how to exit the conversation
         fallbacks=[CommandHandler('cancel', cancel_registration)],
     )
     
-    # Add all command handlers to the application
-    application.add_handler(CommandHandler("start", start))                      # Handle /start command
-    application.add_handler(registration_handler)                               # Handle registration conversation
-    application.add_handler(CommandHandler("profile", profile_command))         # Handle /profile command
-    application.add_handler(CommandHandler("help", help_command))               # Handle /help command
-    application.add_handler(CallbackQueryHandler(handle_menu_callbacks))        # Handle button clicks
+    # Add command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(registration_handler)
+    application.add_handler(CommandHandler("profile", profile_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CallbackQueryHandler(handle_menu_callbacks))
     
-    # Handle ANY other message (when user sends random text)
-    # This will show the Begin button automatically
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,  # Any text that's not a command
-        handle_any_message               # Show Begin button
-    ))
+    # Handle any other text message (non-command)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_any_message))
     
-    # Log that the bot is starting
     logger.info("🚀 Starting Telegram registration bot...")
-    logger.info("✨ Users will see 'Begin' button automatically when they open the chat!")
-    
-    # Start the bot - this keeps it running and listening for messages
     application.run_polling(drop_pending_updates=True)
 
 # This runs only if this file is executed directly (not imported)
